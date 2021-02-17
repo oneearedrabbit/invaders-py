@@ -16,6 +16,13 @@ class GameObject:
 
         self.unpack_sprites()
 
+    def is_enemy(self):
+        return False
+
+    def is_destroyable(self, el):
+        # is object destroyable by el
+        return False
+
     def draw(self, surface, color):
         for y in range(self.HEIGHT):
             for x in range(self.WIDTH):
@@ -98,6 +105,13 @@ class Enemy(GameObject):
         # of steps they can make in one direction
         self.STEPS = 20
 
+    def is_destroyable(self, el):
+        # enemy is always destroyable since we have only a bullet class
+        return True
+
+    def is_enemy(self):
+        return True
+
     def react(self, world, key, time, frame):
         if frame % 10 == 0:
             self.last_moved_at = time
@@ -148,7 +162,7 @@ class Bullet(GameObject):
 
             # a bullet destroys enemies
             for el in world.objects:
-                if Enemy in type(el).__bases__:
+                if el.is_destroyable(self):
                     rect1 = ((self.x, self.y), (self.x + self.WIDTH, self.y + self.HEIGHT))
                     rect2 = ((el.x, el.y), (el.x + el.WIDTH, el.y + el.HEIGHT))
 
@@ -323,11 +337,7 @@ class World:
             el.react(self, key, local_time, frame)
 
         # wining condition
-        enemies_left = 0
-        for el in self.objects:
-            if Enemy in type(el).__bases__:
-                enemies_left += 1
-
+        enemies_left = sum(el.is_enemy() for el in self.objects)
         if enemies_left == 0:
             self.game_over()
 
