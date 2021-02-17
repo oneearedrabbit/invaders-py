@@ -321,8 +321,8 @@ class World:
     def remove_object(self, o):
         for i, el in enumerate(self.objects):
             if el == o:
-               del self.objects[i]
-               break
+                del self.objects[i]
+                break
 
     def destroy_shilds(self):
         for i, el in enumerate(self.objects):
