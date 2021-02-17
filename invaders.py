@@ -322,6 +322,15 @@ class World:
         for el in self.objects:
             el.react(self, key, local_time, frame)
 
+        # wining condition
+        enemies_left = 0
+        for el in self.objects:
+            if Enemy in type(el).__bases__:
+                enemies_left += 1
+
+        if enemies_left == 0:
+            self.game_over()
+
     def render(self, surface):
         self.scoring(surface)
         self.draw(surface, WHITE)
