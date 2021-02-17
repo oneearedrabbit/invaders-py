@@ -15,6 +15,8 @@ TODO:
   - [ ] Start screen
   - [ ] Gameover screen
   - [ ] Destroyable shields
+  - [ ] Aliens to move from the edge to the edge
+  - [ ] Win condition
 
 Demo:
 
