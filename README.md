@@ -12,10 +12,7 @@ $ python invaders.py
 ```
 
 TODO:
-  - [ ] Bullet
-  - [ ] Replace time-based movements to frame-based
   - [ ] Start screen
-  - [ ] Scoring
   - [ ] Gameover screen
   - [ ] Destroyable shields
 

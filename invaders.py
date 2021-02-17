@@ -11,6 +11,9 @@ class GameObject:
         self.x = x
         self.y = y
 
+        self.step = 0
+        self.last_moved_at = None
+
         self.unpack_sprites()
 
     def draw(self, surface, color):
@@ -21,8 +24,11 @@ class GameObject:
                     surface.set_at(position, color)
 
     # an object does nothing unless it's overriden in a child class
-    def react(self, world, key, time):
+    def react(self, world, key, time, frame):
         pass
+
+    def next_sprite(self):
+        self.sprite_step = (self.sprite_step + 1) % len(self.sprites)
 
     def unpack_sprites(self):
         self.sprites = []
@@ -49,6 +55,8 @@ class Player(GameObject):
     WIDTH = 13
     HEIGHT = 8
 
+    GUN_POINT = (13, -8)
+
     SPRITES = [[
         '0000001000000',
         '0000011100000',
@@ -60,11 +68,23 @@ class Player(GameObject):
         '1111111111111',
     ]]
 
-    def react(self, world, key, time):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+
+        self.last_shoot_at = None
+
+    def react(self, world, key, time, frame):
         if key[pg.K_LEFT] and self.x - self.STEP_X > 0:
             self.x -= self.STEP_X
         elif key[pg.K_RIGHT] and self.x + self.WIDTH + self.STEP_X < WINSIZE[0]:
             self.x += self.STEP_X
+        elif key[pg.K_SPACE]:
+            # sort or reloading delay
+            if self.last_shoot_at is None or frame - self.last_shoot_at > 20:
+                bullet = Bullet(self.x + self.GUN_POINT[0], self.y + self.GUN_POINT[1])
+                world.add_object(bullet)
+
+                self.last_shoot_at = frame
 
 
 class Enemy(GameObject):
@@ -74,15 +94,12 @@ class Enemy(GameObject):
     def __init__(self, x, y):
         super().__init__(x, y)
 
-        self.last_moved_at = None
-        self.step = 0
-
         # enemies have different width, so i'm precalculating number
         # of steps they can make in one direction
         self.STEPS = 20
 
-    def react(self, world, key, time):
-        if self.last_moved_at is None or (time - self.last_moved_at).total_seconds() > 0.1:
+    def react(self, world, key, time, frame):
+        if frame % 10 == 0:
             self.last_moved_at = time
             self.step += 1
 
@@ -103,7 +120,49 @@ class Enemy(GameObject):
             if self.y >= 410:
                 world.game_over()
 
-            self.sprite_step = (self.sprite_step + 1) % len(self.sprites)
+            self.next_sprite()
+
+
+class Bullet(GameObject):
+    STEP_Y = 5
+
+    WIDTH = 3
+    HEIGHT = 5
+    SPRITES = [[
+        '001',
+        '010',
+        '100',
+        '010',
+        '001',
+    ], [
+        '010',
+        '101',
+        '010',
+        '101',
+        '010',
+    ]]
+
+    def react(self, world, key, time, frame):
+        if frame % 2 == 0:
+            self.y -= self.STEP_Y
+
+            # a bullet destroys enemies
+            for el in world.objects:
+                if Enemy in type(el).__bases__:
+                    rect1 = ((self.x, self.y), (self.x + self.WIDTH, self.y + self.HEIGHT))
+                    rect2 = ((el.x, el.y), (el.x + el.WIDTH, el.y + el.HEIGHT))
+
+                    # collision detection
+                    if ((rect1[0][0] > rect2[0][0] and rect1[0][0] < rect2[1][0]) or
+                        (rect1[1][0] > rect2[0][0] and rect1[1][0] < rect2[1][0])) and \
+                        ((rect1[0][1] > rect2[0][1] and rect1[0][1] < rect2[1][1]) or
+                         (rect1[1][1] > rect2[0][1] and rect1[1][1] < rect2[1][1])):
+                        world.remove_object(el)
+                        world.remove_object(self)
+                        world.increment_score()
+                        break
+
+            self.next_sprite()
 
 
 class Enemy1(Enemy):
@@ -179,7 +238,7 @@ class Enemy3(Enemy):
         '001101101100',
         '110000000011',
     ]]
-    
+
 class Shield(GameObject):
     WIDTH = 22
     HEIGHT = 15
@@ -210,6 +269,8 @@ class GameState(Enum):
 
 class World:
     def __init__(self):
+        self.score = 0
+
         self.player = Player(20, WINSIZE[1] - 40)
         self.shields = [
             Shield(WINSIZE[0] // 3 - 140, WINSIZE[1] - 100),
@@ -240,6 +301,15 @@ class World:
     def add_object(self, el):
         self.objects.append(el)
 
+    def increment_score(self):
+        self.score += 1
+
+    def remove_object(self, o):
+        for i, el in enumerate(self.objects):
+            if el == o:
+               del self.objects[i]
+               break
+
     def destroy_shilds(self):
         for i, el in enumerate(self.objects):
             if type(el) == Shield:
@@ -248,12 +318,19 @@ class World:
     def game_over(self):
         self.game_state = GameState.GAMEOVER
 
-    def react(self, key, local_time):
+    def react(self, key, local_time, frame):
         for el in self.objects:
-            el.react(self, key, local_time)
+            el.react(self, key, local_time, frame)
 
     def render(self, surface):
+        self.scoring(surface)
         self.draw(surface, WHITE)
+
+    def scoring(self, surface):
+        font = pg.font.SysFont(None, 24)
+        img = font.render(str(self.score), True, WHITE)
+        surface.blit(img, (20, 20))
+
 
     def reset(self, surface):
         # it's faster to paint the entire surface black than reset
@@ -279,6 +356,8 @@ def main():
     pg.display.set_caption("Space Invaders")
     screen.fill(BLACK)
 
+    frame = 0
+
     world = World()
 
     done = False
@@ -292,13 +371,14 @@ def main():
         world.reset(screen)
 
         # world events
+        frame += 1
         time = datetime.utcnow()
         key_input = pg.key.get_pressed()
 
         # react is a function of signals. it's up to an object how to
         # interpret them, e.g. we can pass a random number to summon
         # UFO objects
-        world.react(key_input, time)
+        world.react(key_input, time, frame)
 
         # draw world
         world.render(screen)
